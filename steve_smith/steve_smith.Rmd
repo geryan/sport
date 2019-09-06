@@ -135,7 +135,7 @@ This is predicts that Steve Smith will have an average in each year higher than 
 
 **Ahhhh he's going to average over 100 each year until he retires at 41 and might get as high as 250!!!**
 
-The fact's don't lie.
+The facts don't lie.
 
 
 And here are the predicted yearly averages for the linear model
