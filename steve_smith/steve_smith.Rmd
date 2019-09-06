@@ -1,0 +1,157 @@
+---
+title: "Steve Smith"
+output: rmarkdown::github_document
+---
+
+Load in packages
+
+```{r packages}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+Read in and clean the data. Downloaded from [CricInfo](http://stats.espncricinfo.com/ci/engine/player/267192.html?class=1;template=results;type=allround;view=innings) on 2019-09-06
+
+```{r ssdata}
+ssdata <- read_csv(file = "steve_smith_stats.csv", skip = 1)
+
+Encoding(ssdata$opposition) <- "UTF-8"
+
+ssdata %<>%
+  mutate(start_date = dmy(start_date),
+         opposition = iconv(opposition, "UTF-8", "UTF-8", sub = ""),
+         opposition = sub("^v", "", opposition),
+         not_out = grepl("\\*$", score),
+         score = sub("\\*$", "", score),
+         score = as.integer(score),
+         overs = ifelse(overs == "-", NA, overs),
+         inningstype = ifelse(is.na(overs), "bat", "bowl"),
+         conceded = as.integer(conceded),
+         wickets = as.integer(wickets),
+         catches = as.integer(catches),
+         stumpings = as.integer(stumpings),
+         oversi = as.integer(overs),
+         year = year(start_date)) %>%
+  select(-X12)
+
+ssdata
+```
+Separate out the batting data
+```{r ss_bat}
+ss_bat <- ssdata %>%
+  filter(inningstype == "bat") %>%
+  filter(!is.na(score))
+
+ss_bat
+```
+Get his batting average in each year
+```{r ss_ba}
+ss_ba <- ss_bat %>%
+  group_by(year) %>%
+  summarise(runs = sum(score),
+            ninnings = n(),
+            notouts = sum(not_out),
+            avg = sum(score)/(n() - sum(not_out)))
+
+ss_ba
+```
+And career average
+```{r ss career average}
+ss_bat %>%
+  summarise(avg = sum(score)/(n() - sum(not_out)))
+```
+
+What does it look like if we exclude the early years...
+
+Here's his career average excluding 2010
+```{r ca ex 2010}
+ss_bat %>%
+  filter(year != 2010) %>%
+  summarise(avg = sum(score)/(n() - sum(not_out)))
+```
+
+Excluding 2010-11
+```{r ca ex 10-11}
+ss_bat %>%
+  filter(year != 2010) %>%
+  filter(year != 2011) %>%
+  summarise(avg = sum(score)/(n() - sum(not_out)))
+```
+And excluding up to 2013, an inconveniently lean year
+```{r ca ex 10-13}
+ss_bat %>%
+  filter(year != 2010) %>%
+  filter(year != 2011) %>%
+  filter(year != 2013) %>%
+  summarise(avg = sum(score)/(n() - sum(not_out)))
+```
+What is the overall progression of Steve Smith's yearly average?
+Line is smoothed average, points are yearly average, and colour scale is number of innings that year.
+```{r plot smooth}
+ggplot(ss_ba) +
+  geom_smooth(aes(x = year, y = avg), col = "black") +
+  geom_point(aes(x = year, y = avg, col = ninnings), size = 3) +
+  scale_colour_viridis_c(guide = guide_colourbar(title = "No.\ninnings")) +
+  theme_classic() +
+  labs(x = "Year", y = "Yearly batting average")
+```
+
+**There's clearly an unequivocal upward trend, so let's make some egregious predictions about how good his average will be at the end of his career.**
+
+So, we fit a simple exponential model, and a linear model, and make predictions from the model fits.
+```{r sslm}
+sslm <- lm(avg ~ year, data = ss_ba)
+ssem <- lm(log(avg) ~ year, data = ss_ba)
+
+lin.preds <- predict(sslm, list(year = 2010:2030))
+exp.preds <- exp(predict(ssem, list(year = 2010:2030)))
+
+ss_lin_preds <- tibble(year = 2010:2030, avg = lin.preds)
+ss_exp_preds <- tibble(year = 2010:2030, avg = exp.preds)
+```
+
+
+And what do the results show?
+
+As above with points showing annual batting averages, black lines are Steve Smith's predicted annual average, and the red line is the Don's career average of 99.94.
+```{r preds plot}
+sspredplot <- ggplot() +
+  geom_point(data = ss_ba, aes(x = year, y = avg, col = ninnings), size = 3) +
+  geom_line(data = ss_lin_preds, aes(x = year, y = avg), size = 1) +
+  geom_line(data = ss_exp_preds, aes(x = year, y = avg), size = 1) +
+  geom_hline(yintercept = 99.94, col = "red") +
+  scale_colour_viridis_c(guide = guide_colourbar(title = "No.\ninnings")) +
+  theme_classic() +
+  labs(x = "Year", y = "Yearly batting average")
+
+sspredplot
+```
+
+This is predicts that Steve Smith will have an average in each year higher than the Don's career average every year from around 2020.
+
+*Oh my gosh it's already higher than that this year, he's even better than these models predict.*
+
+**Ahhhh he's going to average over 100 each year until he retires at 41 and might get as high as 250!!!**
+
+The fact's don't lie.
+
+
+And here are the predicted yearly averages for the linear model
+```{r ss_lin_preds}
+ss_lin_preds
+```
+... and the exponential model
+```{r ss_exp_preds}
+ss_exp_preds
+```
+
+```{r}
+png(res = 300, height = 1000, width = 2000)
+
+sspredplot
+
+dev.off()
+```
+
